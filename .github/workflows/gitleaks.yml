@@ -1,0 +1,82 @@
+name: gitleaks
+
+# 公式 README (https://github.com/gitleaks/gitleaks#installing) で推奨されている
+# Docker image (ghcr.io/gitleaks/gitleaks) を使って gitleaks を実行する Reusable Workflow。
+# v8.19.0 以降の deprecation に従い、サブコマンドは `git` / `dir` を使う。
+on:
+  workflow_call:
+    inputs:
+      gitleaks-version:
+        description: 'gitleaks の image タグ (例: latest, v8.30.1)。新しい secret パターンを取り込むため latest を既定とする'
+        type: string
+        default: latest
+      config-path:
+        description: 'リポ内の .gitleaks.toml 等のパス。空ならデフォルトルールを使用'
+        type: string
+        default: ''
+      fail-on-leak:
+        description: '検出時にジョブを失敗させるか (false なら exit-code=0)'
+        type: boolean
+        default: true
+      fetch-depth:
+        description: 'actions/checkout の fetch-depth。0 = 全履歴 (git モード時の推奨)'
+        type: number
+        default: 0
+      scan-mode:
+        description: 'gitleaks のサブコマンド (git = 履歴スキャン / dir = ディレクトリスキャン)'
+        type: string
+        default: git
+      additional-args:
+        description: 'gitleaks コマンドに追加で渡したい引数 (例: --log-opts="--all main..HEAD")'
+        type: string
+        default: ''
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+
+      - name: Run gitleaks
+        env:
+          IMAGE: ghcr.io/gitleaks/gitleaks:${{ inputs.gitleaks-version }}
+          MODE: ${{ inputs.scan-mode }}
+          CONFIG_PATH: ${{ inputs.config-path }}
+          FAIL_ON_LEAK: ${{ inputs.fail-on-leak }}
+          EXTRA_ARGS: ${{ inputs.additional-args }}
+        run: |
+          set -euo pipefail
+
+          ARGS=("${MODE}" --redact --verbose --report-format sarif --report-path /repo/gitleaks.sarif)
+          if [ -n "${CONFIG_PATH}" ]; then
+            ARGS+=(--config "/repo/${CONFIG_PATH}")
+          fi
+          if [ "${FAIL_ON_LEAK}" = "false" ]; then
+            ARGS+=(--exit-code 0)
+          fi
+          if [ -n "${EXTRA_ARGS}" ]; then
+            # shellcheck disable=SC2206
+            EXTRA=(${EXTRA_ARGS})
+            ARGS+=("${EXTRA[@]}")
+          fi
+
+          docker pull --quiet "${IMAGE}"
+          echo "+ docker run ${IMAGE} ${ARGS[*]}"
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/repo" \
+            -w /repo \
+            "${IMAGE}" \
+            "${ARGS[@]}"
+
+      - name: Upload SARIF report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-sarif
+          path: gitleaks.sarif
+          if-no-files-found: ignore
+          retention-days: 14

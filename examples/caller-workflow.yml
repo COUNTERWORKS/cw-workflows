@@ -1,0 +1,27 @@
+# 各リポジトリの .github/workflows/gitleaks.yml に配置する caller workflow のサンプル。
+# 内部で COUNTERWORKS/cw-workflows の reusable workflow を呼び出す。
+
+name: gitleaks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  schedule:
+    # 毎週月曜 09:00 JST (00:00 UTC) に full history を走査
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+jobs:
+  scan:
+    uses: COUNTERWORKS/cw-workflows/.github/workflows/gitleaks.yml@main
+    with:
+      # オプション: リポ固有の許可ルール (false positive 除外等) をコミットしたい場合
+      # config-path: .gitleaks.toml
+      # 履歴全体ではなく PR 差分のみに絞りたい場合は additional-args を活用
+      # additional-args: '--log-opts="--all origin/main..HEAD"'
+      scan-mode: git
+      fail-on-leak: true

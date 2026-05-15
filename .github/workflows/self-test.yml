@@ -1,0 +1,18 @@
+# cw-workflows 自身に対する Reusable Workflow の動作確認 (smoke test)。
+# `gitleaks.yml` を main から呼び出し、push protection と同等の検査が機能するかを継続的に確認する。
+
+name: self-test (gitleaks)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gitleaks:
+    uses: ./.github/workflows/gitleaks.yml
+    with:
+      scan-mode: git
+      fail-on-leak: true

@@ -1,0 +1,21 @@
+# COUNTERWORKS baseline gitleaks config.
+# 必要に応じて各リポでこのファイルを copy → 拡張 (allowlist 追加など) する。
+# 完全に置き換えたい場合は extend ブロックを外す。
+
+[extend]
+useDefault = true
+
+# 全リポ共通の allowlist (テストフィクスチャ・サンプル等で false positive が頻発する場合は追加)
+[allowlist]
+description = "COUNTERWORKS common allowlist"
+paths = [
+  '''(^|/)tmp/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)vendor/''',
+  '''(^|/)\.gitleaksignore$''',
+]
+# よくあるダミー値 (公式 docs / examples 由来) はノイズになるため除外
+regexes = [
+  '''AKIAIOSFODNN7EXAMPLE''',
+  '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',
+]
