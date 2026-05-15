@@ -1,13 +1,15 @@
 name: gitleaks
 
-# 公式 README (https://github.com/gitleaks/gitleaks#installing) で推奨されている
-# Docker image (ghcr.io/gitleaks/gitleaks) を使って gitleaks を実行する Reusable Workflow。
-# v8.19.0 以降の deprecation に従い、サブコマンドは `git` / `dir` を使う。
+# 公式 gitleaks (https://github.com/gitleaks/gitleaks, MIT) の release バイナリを
+# 直接 install して実行する Reusable Workflow。
+# - 公式 README で推奨されている Docker image (ghcr.io/gitleaks/gitleaks) は
+#   ubuntu-slim ランナーに Docker daemon が無いため使えないので、release tarball から install
+# - v8.19.0 以降の deprecation に従い、サブコマンドは `git` / `dir` を使う
 on:
   workflow_call:
     inputs:
       gitleaks-version:
-        description: 'gitleaks の image タグ (例: latest, v8.30.1)。新しい secret パターンを取り込むため latest を既定とする'
+        description: 'gitleaks のリリースタグ (例: latest, v8.30.1)。新しい secret パターンを取り込むため latest を既定'
         type: string
         default: latest
       config-path:
@@ -41,9 +43,37 @@ jobs:
         with:
           fetch-depth: ${{ inputs.fetch-depth }}
 
+      - name: Install gitleaks
+        env:
+          REQUESTED_VERSION: ${{ inputs.gitleaks-version }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${REQUESTED_VERSION}"
+          if [ "${VERSION}" = "latest" ]; then
+            VERSION=$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name')
+            echo "Resolved latest = ${VERSION}"
+          fi
+          VERSION_NUM="${VERSION#v}"
+
+          case "$(uname -m)" in
+            x86_64) ARCH_TAG=x64 ;;
+            aarch64) ARCH_TAG=arm64 ;;
+            *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
+          esac
+
+          TARBALL="gitleaks_${VERSION_NUM}_linux_${ARCH_TAG}.tar.gz"
+          curl -fsSL -o "/tmp/${TARBALL}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/${VERSION}/${TARBALL}"
+          tar -xzf "/tmp/${TARBALL}" -C /tmp gitleaks
+
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/gitleaks "$HOME/.local/bin/gitleaks"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/gitleaks" version
+
       - name: Run gitleaks
         env:
-          IMAGE: ghcr.io/gitleaks/gitleaks:${{ inputs.gitleaks-version }}
           MODE: ${{ inputs.scan-mode }}
           CONFIG_PATH: ${{ inputs.config-path }}
           FAIL_ON_LEAK: ${{ inputs.fail-on-leak }}
@@ -51,9 +81,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          ARGS=("${MODE}" --redact --verbose --report-format sarif --report-path /repo/gitleaks.sarif)
+          ARGS=("${MODE}" --redact --verbose --report-format sarif --report-path gitleaks.sarif)
           if [ -n "${CONFIG_PATH}" ]; then
-            ARGS+=(--config "/repo/${CONFIG_PATH}")
+            ARGS+=(--config "${CONFIG_PATH}")
           fi
           if [ "${FAIL_ON_LEAK}" = "false" ]; then
             ARGS+=(--exit-code 0)
@@ -64,13 +94,8 @@ jobs:
             ARGS+=("${EXTRA[@]}")
           fi
 
-          docker pull --quiet "${IMAGE}"
-          echo "+ docker run ${IMAGE} ${ARGS[*]}"
-          docker run --rm \
-            -v "${GITHUB_WORKSPACE}:/repo" \
-            -w /repo \
-            "${IMAGE}" \
-            "${ARGS[@]}"
+          echo "+ gitleaks ${ARGS[*]}"
+          gitleaks "${ARGS[@]}"
 
       - name: Upload SARIF report
         if: always()
