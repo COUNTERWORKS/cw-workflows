@@ -36,7 +36,7 @@ name: gitleaks
 on:
   pull_request:
   push:
-    branches: [main, master, develop]
+    branches: [main]   # ← 各リポの default branch を 1 本だけ指定 (例: develop)
   schedule:
     - cron: "0 0 * * 1"
   workflow_dispatch:
