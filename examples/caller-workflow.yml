@@ -7,9 +7,9 @@ on:
   pull_request:
   push:
     branches:
+      # 各リポの default branch のみを指定する (例: main / develop)。
+      # master を default にしているリポは現状存在しないため、master の併記は不要。
       - main
-      - master
-      - develop
   schedule:
     # 毎週月曜 09:00 JST (00:00 UTC) に full history を走査
     - cron: "0 0 * * 1"
